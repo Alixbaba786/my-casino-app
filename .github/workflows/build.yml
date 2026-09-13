@@ -1,0 +1,78 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update -y
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
+            build-essential git zip unzip \
+            openjdk-11-jdk openjdk-11-jdk-headless \
+            python3-dev python3-venv \
+            autoconf automake libtool m4 \
+            pkg-config libffi-dev libssl-dev \
+            libsqlite3-dev libbz2-dev zlib1g-dev \
+            libreadline-dev libgdbm-dev liblzma-dev \
+            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+            ccache wget curl
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
+      - name: Setup Java Home
+        run: |
+          echo "JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> $GITHUB_ENV
+
+      - name: Install Python Build Tools
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          pip install "cython<3" buildozer
+
+      - name: Verify Files
+        run: |
+          [ -f buildozer.spec ] && echo "✓ buildozer.spec found" || exit 1
+          [ -f main.py ] && echo "✓ main.py found" || exit 1
+
+      - name: Clean Cache
+        run: |
+          rm -rf ~/.buildozer/android/platform/build* 2>/dev/null || true
+
+      - name: Build APK
+        run: |
+          yes | buildozer -v android debug 2>&1 | tail -200
+
+      - name: Check Build Status
+        run: |
+          if [ -f bin/*.apk ]; then
+            echo "✅ APK BUILD SUCCESS!"
+            ls -lh bin/*.apk
+            exit 0
+          else
+            echo "❌ BUILD FAILED"
+            exit 1
+          fi
+
+      - name: Upload APK
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: PK786-Casino-APK
+          path: bin/*.apk
+          if-no-files-found: ignore
+          retention-days: 30
